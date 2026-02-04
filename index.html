@@ -1,0 +1,298 @@
+import React, { useState, useEffect } from 'react';
+import { Search, Dog, Brain, RefreshCw, CheckCircle2, XCircle, Info, ChevronRight } from 'lucide-react';
+
+const DOG_BREEDS = [
+  { id: 'golden', name: 'Golden Retriever', description: 'Amigable, inteligente y devoto. Muy popular como perro de familia.', origin: 'Escocia' },
+  { id: 'gshepherd', name: 'Pastor Alemán', description: 'Valiente, vigilante y capaz. Muy común en trabajos policiales.', origin: 'Alemania' },
+  { id: 'frenchie', name: 'Bulldog Francés', description: 'Adaptable, juguetón y afectuoso. Ideal para la vida en ciudad.', origin: 'Francia' },
+  { id: 'beagle', name: 'Beagle', description: 'Curioso, amable y alegre. Tienen un olfato increíble.', origin: 'Reino Unido' },
+  { id: 'poodle', name: 'Caniche (Poodle)', description: 'Orgulloso, activo y muy inteligente. Su pelaje es hipoalergénico.', origin: 'Francia/Alemania' },
+  { id: 'husky', name: 'Husky Siberiano', description: 'Leal, travieso y extrovertido. Conocidos por sus ojos azules y resistencia.', origin: 'Siberia' },
+  { id: 'dachshund', name: 'Dachshund (Salchicha)', description: 'Vivaz, valiente y testarudo. Originalmente criados para cazar tejones.', origin: 'Alemania' },
+  { id: 'border', name: 'Border Collie', description: 'Considerada la raza más inteligente del mundo. Energético y trabajador.', origin: 'Reino Unido' }
+];
+
+const App = () => {
+  const [view, setView] = useState('home'); // 'home', 'explore', 'quiz'
+  const [currentQuiz, setCurrentQuiz] = useState(null);
+  const [feedback, setFeedback] = useState(null); // { isCorrect: bool, selectedId: string }
+  const [score, setScore] = useState(0);
+  const [generatingImages, setGeneratingImages] = useState({});
+  const [breedImages, setBreedImages] = useState({});
+
+  // Function to generate images using Imagen 4.0
+  const generateDogImage = async (breedName) => {
+    if (breedImages[breedName]) return;
+    
+    setGeneratingImages(prev => ({ ...prev, [breedName]: true }));
+    try {
+      const apiKey = ""; // API key is handled by the environment
+      const prompt = `A professional high-quality photography of a purebred ${breedName} dog, outdoor natural lighting, 8k resolution`;
+      
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instances: [{ prompt }],
+          parameters: { sampleCount: 1 }
+        })
+      });
+
+      const data = await response.json();
+      if (data.predictions && data.predictions[0]) {
+        const imageUrl = `data:image/png;base64,${data.predictions[0].bytesBase64Encoded}`;
+        setBreedImages(prev => ({ ...prev, [breedName]: imageUrl }));
+      }
+    } catch (error) {
+      console.error("Error generating image:", error);
+    } finally {
+      setGeneratingImages(prev => ({ ...prev, [breedName]: false }));
+    }
+  };
+
+  // Start a new quiz question
+  const startNewQuestion = () => {
+    const correct = DOG_BREEDS[Math.floor(Math.random() * DOG_BREEDS.length)];
+    const options = [correct];
+    
+    while (options.length < 4) {
+      const random = DOG_BREEDS[Math.floor(Math.random() * DOG_BREEDS.length)];
+      if (!options.find(o => o.id === random.id)) {
+        options.push(random);
+      }
+    }
+    
+    // Shuffle options
+    const shuffled = options.sort(() => Math.random() - 0.5);
+    
+    setCurrentQuiz({ correct, options: shuffled });
+    setFeedback(null);
+    generateDogImage(correct.name);
+  };
+
+  const handleAnswer = (selectedId) => {
+    if (feedback) return; // Prevent double clicking
+
+    const isCorrect = selectedId === currentQuiz.correct.id;
+    setFeedback({ isCorrect, selectedId });
+    
+    if (isCorrect) {
+      setScore(prev => prev + 1);
+    }
+  };
+
+  useEffect(() => {
+    if (view === 'quiz' && !currentQuiz) {
+      startNewQuestion();
+    }
+    if (view === 'explore') {
+      DOG_BREEDS.forEach(breed => generateDogImage(breed.name));
+    }
+  }, [view]);
+
+  const LoadingSpinner = () => (
+    <div className="flex flex-col items-center justify-center p-8">
+      <RefreshCw className="w-10 h-10 text-blue-500 animate-spin mb-2" />
+      <p className="text-gray-500 text-sm">Generando imagen realista...</p>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
+      {/* Header */}
+      <nav className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('home')}>
+            <Dog className="text-blue-600 w-8 h-8" />
+            <span className="font-bold text-xl tracking-tight">PerroGuía</span>
+          </div>
+          <div className="flex gap-4">
+            <button 
+              onClick={() => setView('explore')}
+              className={`px-3 py-1 rounded-full text-sm font-medium transition ${view === 'explore' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'}`}
+            >
+              Explorar
+            </button>
+            <button 
+              onClick={() => { setView('quiz'); setScore(0); startNewQuestion(); }}
+              className={`px-3 py-1 rounded-full text-sm font-medium transition ${view === 'quiz' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'}`}
+            >
+              Quiz
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      <main className="max-w-4xl mx-auto p-4 md:p-6">
+        {/* Home View */}
+        {view === 'home' && (
+          <div className="text-center py-12 px-4">
+            <div className="bg-blue-600 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-blue-200">
+              <Brain className="text-white w-10 h-10" />
+            </div>
+            <h1 className="text-4xl font-extrabold mb-4 text-gray-900">¿Cuánto sabes de perros?</h1>
+            <p className="text-gray-600 text-lg mb-8 max-w-md mx-auto">
+              Aprende a identificar las razas más populares con imágenes generadas por IA y pon a prueba tu conocimiento.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-lg mx-auto">
+              <button 
+                onClick={() => setView('explore')}
+                className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-2xl hover:border-blue-400 hover:shadow-md transition group text-left"
+              >
+                <div>
+                  <h3 className="font-bold">Explorar Razas</h3>
+                  <p className="text-sm text-gray-500">Estudia antes del examen</p>
+                </div>
+                <Search className="text-gray-400 group-hover:text-blue-500 transition" />
+              </button>
+              <button 
+                onClick={() => { setView('quiz'); setScore(0); startNewQuestion(); }}
+                className="flex items-center justify-between p-4 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 shadow-lg shadow-blue-100 transition text-left"
+              >
+                <div>
+                  <h3 className="font-bold">Empezar Quiz</h3>
+                  <p className="text-blue-100 text-sm">Demuestra lo que sabes</p>
+                </div>
+                <ChevronRight />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Explore View */}
+        {view === 'explore' && (
+          <div>
+            <div className="mb-8">
+              <h2 className="text-2xl font-bold mb-2">Biblioteca de Razas</h2>
+              <p className="text-gray-500 text-sm">Conoce a tus mejores amigos</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {DOG_BREEDS.map(breed => (
+                <div key={breed.id} className="bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-md transition">
+                  <div className="aspect-[4/3] bg-gray-200 relative">
+                    {generatingImages[breed.name] ? (
+                      <LoadingSpinner />
+                    ) : (
+                      <img 
+                        src={breedImages[breed.name] || `https://via.placeholder.com/400x300?text=${breed.name}`} 
+                        alt={breed.name}
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                  </div>
+                  <div className="p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="text-xl font-bold text-gray-800">{breed.name}</h3>
+                      <span className="bg-blue-50 text-blue-600 text-xs font-semibold px-2 py-1 rounded-md">
+                        {breed.origin}
+                      </span>
+                    </div>
+                    <p className="text-gray-600 text-sm leading-relaxed">{breed.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Quiz View */}
+        {view === 'quiz' && currentQuiz && (
+          <div className="max-w-2xl mx-auto">
+            <div className="flex items-center justify-between mb-6">
+              <span className="text-sm font-bold text-blue-600 uppercase tracking-wider">Adivina la raza</span>
+              <div className="bg-white border px-4 py-1 rounded-full text-sm font-bold shadow-sm">
+                Puntuación: <span className="text-blue-600">{score}</span>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-3xl overflow-hidden border border-gray-200 shadow-xl mb-6">
+              <div className="aspect-video bg-gray-100 relative">
+                {generatingImages[currentQuiz.correct.name] ? (
+                  <LoadingSpinner />
+                ) : (
+                  <img 
+                    src={breedImages[currentQuiz.correct.name] || `https://via.placeholder.com/600x400?text=Cargando...`} 
+                    alt="Pregunta del quiz"
+                    className="w-full h-full object-cover"
+                  />
+                )}
+                
+                {feedback && (
+                  <div className={`absolute inset-0 flex flex-col items-center justify-center backdrop-blur-sm transition-all duration-500 ${feedback.isCorrect ? 'bg-green-500/20' : 'bg-red-500/20'}`}>
+                    {feedback.isCorrect ? (
+                      <div className="bg-white p-6 rounded-3xl shadow-2xl flex flex-col items-center animate-bounce">
+                        <CheckCircle2 className="w-16 h-16 text-green-500 mb-2" />
+                        <p className="text-xl font-black text-green-600">¡CORRECTO!</p>
+                      </div>
+                    ) : (
+                      <div className="bg-white p-6 rounded-3xl shadow-2xl flex flex-col items-center text-center max-w-[80%]">
+                        <XCircle className="w-16 h-16 text-red-500 mb-2" />
+                        <p className="text-xl font-black text-red-600 mb-1">¡TE EQUIVOCASTE!</p>
+                        <p className="text-gray-600 font-medium">Es un <span className="text-blue-600">{currentQuiz.correct.name}</span></p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {currentQuiz.options.map((option) => {
+                    let btnClass = "p-4 rounded-xl border-2 font-bold text-left transition-all flex items-center justify-between ";
+                    
+                    if (!feedback) {
+                      btnClass += "border-gray-100 hover:border-blue-400 hover:bg-blue-50 text-gray-700";
+                    } else {
+                      if (option.id === currentQuiz.correct.id) {
+                        btnClass += "border-green-500 bg-green-50 text-green-700 scale-[1.02] z-10 shadow-md";
+                      } else if (feedback.selectedId === option.id && !feedback.isCorrect) {
+                        btnClass += "border-red-500 bg-red-50 text-red-700 opacity-80";
+                      } else {
+                        btnClass += "border-gray-100 text-gray-300 opacity-50";
+                      }
+                    }
+
+                    return (
+                      <button
+                        key={option.id}
+                        disabled={!!feedback}
+                        onClick={() => handleAnswer(option.id)}
+                        className={btnClass}
+                      >
+                        {option.name}
+                        {feedback && option.id === currentQuiz.correct.id && <CheckCircle2 className="w-5 h-5" />}
+                        {feedback && feedback.selectedId === option.id && !feedback.isCorrect && <XCircle className="w-5 h-5" />}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {feedback && (
+                  <div className="mt-8 flex flex-col sm:flex-row gap-4 items-center justify-between bg-gray-50 p-4 rounded-2xl animate-in fade-in slide-in-from-bottom-2">
+                    <div className="flex items-center gap-3 text-sm text-gray-600">
+                      <Info className="w-5 h-5 text-blue-500" />
+                      <span>{currentQuiz.correct.description}</span>
+                    </div>
+                    <button 
+                      onClick={startNewQuestion}
+                      className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 transition flex items-center gap-2 shadow-lg shadow-blue-200"
+                    >
+                      Siguiente <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Footer for mobile/info */}
+      <footer className="mt-auto py-8 text-center text-gray-400 text-xs">
+        Hecho con ❤️ para amantes de los perros • Imágenes generadas por IA
+      </footer>
+    </div>
+  );
+};
+
+export default App;
